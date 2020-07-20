@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+import argparse
+import boto3
+import json
+import os
+import sys
+import time
+
+from datetime import datetime
+from math import ceil
+from select import select
+
+# terminal colours
+RED = '\033[91m'
+GREEN = '\033[92m'
+END = '\033[0m'
+PASS = f'{GREEN}\u2714{END}'
+FAIL = f'{RED}\u2718{END}'
+
+def list_targets(session, deployid):
+    try:
+        data = dict(deploymentId=deployid)
+        cd = session.client('codedeploy')
+        resp = cd.list_deployment_targets(**data)
+        targets = resp.get('targetIds')
+        return targets
+    except Exception as e:
+        raise SystemExit(f'error: list_targets failed with {e.__class__.__name__}: {e}')
+
+def get_target(session, deployid, targetid):
+    try:
+        data = dict(deploymentId=deployid, targetId=targetid)
+        cd = session.client('codedeploy')
+        resp = cd.get_deployment_target(**data)
+        target = resp.get('deploymentTarget')
+        return target
+    except Exception as e:
+        raise SystemExit(f'error: get_target failed with {e.__class__.__name__}: {e}')
+
+def lc(event):
+    data = dict(
+        name = event.get('lifecycleEventName'),
+        start = event.get('startTime'),
+        end = event.get('endTime'),
+        diag = event.get('diagnostics'),
+        status = event.get('status')
+    )
+    if data['start'] and data['end']:
+        data['duration'] = f"{(data['end'] - data['start']).seconds}s"
+    return data
+
+def process_args():
+    ap = argparse.ArgumentParser(prog='cdwatch',
+                                 description='watch a codedeploy deployment')
+    grp = ap.add_mutually_exclusive_group()
+    ap.add_argument('--profile', metavar='aws_profile'.upper(),
+                    choices=boto3.session.Session().available_profiles)
+    ap.add_argument('--id',
+                    help='provide deployment-id as argument')
+    ap.add_argument('--freq', type=int, default=3,
+                    help='time in seconds between deployment checks')
+    ap.add_argument('--timeout', type=int, default=120,
+                    help='total time in seconds to watch deployment')
+    grp.add_argument('--quiet', action='store_true',
+                    help='don\'t show diagnostic information on failure')
+    grp.add_argument('--json', action='store_true',
+                    help='display diagnostic output as raw json')
+    args = vars(ap.parse_args())
+    return args
+
+def main():
+    args = process_args()
+
+    deployid = args['id']
+    if not deployid:
+        try:
+            i, o, e = select([sys.stdin], [], [], 3)
+            if not i: raise ValueError('did not receive a deployment-id')
+            stdin = ''.join([line.strip() for line in i[0]])
+            deployid = json.loads(stdin).get('deploymentId')
+        except Exception as e:
+            raise SystemExit(f'cdwatch: error: {e}')
+
+    print(f'got deployment id: {deployid}')
+    if args['profile']: os.environ['AWS_PROFILE'] = args['profile']
+    session = boto3.session.Session()
+    time.sleep(1)
+    targets = list_targets(session, deployid)
+    print('found deployment target(s): {}'.format(*targets, sep=', '))
+
+    checked = []
+    failed = []
+    counter = ceil((args['timeout'] / args['freq']))
+    towatch = targets[0]
+    print(f'\nwatching deployment for {towatch}..\n')
+    while counter > 0:
+        counter -= 1
+        target = get_target(session, deployid, towatch)
+        lcevents = target.get('instanceTarget').get('lifecycleEvents')
+        for e in lcevents:
+            name = lc(e).get('name')
+            status = lc(e).get('status')
+            duration = lc(e).get('duration')
+            # statuses: Pending|InProgress|Succeeded|Failed|Skipped|Unknown
+            if not name in checked and status.lower() != 'pending':
+                print(name)
+                if duration:
+                    print(f' - duration: {duration}')
+                if status.startswith('Fail'):
+                    print(f' - status: {status} {FAIL}')
+                    failed.append(lc(e).get('diag'))
+                elif status.startswith('Succ'):
+                    print(f' - status: {status} {PASS}')
+                else:
+                    print(f' - status: {status}')
+                checked.append(name)
+        if len(checked) == len(lcevents): break
+        time.sleep(args['freq'])
+    print('\nwatch ended..\n')
+
+    if failed and not args['quiet']:
+        print('lifecycle event failure detected! diagnostic information:')
+        if args['json']:
+            print(json.dumps(*failed, indent=4, default=str), file=sys.stderr)
+        else:
+            for k, v in failed[0].items():
+                print(f' - {k}: {v}', file=sys.stderr) if v else None
+        raise SystemExit(1)
+
+main()
