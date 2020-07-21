@@ -118,13 +118,14 @@ def main():
         time.sleep(args['freq'])
     print('\nwatch ended..\n')
 
-    if failed and not args['quiet']:
-        print('lifecycle event failure detected! diagnostic information:')
-        if args['json']:
-            print(json.dumps(*failed, indent=4, default=str), file=sys.stderr)
-        else:
-            for k, v in failed[0].items():
-                print(f' - {k}: {v}', file=sys.stderr) if v else None
+    if failed:
+        if not args['quiet']:
+            print('lifecycle event failure detected! diagnostic information:')
+            if args['json']:
+                print(json.dumps(*failed, indent=4, default=str), file=sys.stderr)
+            else:
+                for k, v in failed[0].items():
+                    print(f' - {k}: {v}', file=sys.stderr) if v else None
         raise SystemExit(1)
 
 main()
