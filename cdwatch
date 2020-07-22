@@ -16,6 +16,7 @@ GREEN = '\033[92m'
 END = '\033[0m'
 PASS = f'{GREEN}\u2714{END}'
 FAIL = f'{RED}\u2718{END}'
+os.environ['LC_ALL'] = 'en_US.UTF-8'
 
 def list_targets(session, deployid):
     try:
