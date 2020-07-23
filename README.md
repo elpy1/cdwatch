@@ -4,7 +4,7 @@ A small python wrapper for AWS codedeploy to watch your EC2 deployment until com
 
 ## Requirements
 - python3
-- `argparse` and `boto3` pip modules
+- `boto3` pip module
 - a `codedeploy` deployment to deploy :innocent:
 
 ## Info
@@ -12,7 +12,7 @@ It's sort of annoying when you're regularly testing deployments and you want inf
 
 This tool was created to watch a `codedeploy` EC2 deployment until completion, exit appropriately and provide terminal output (including diagnostic information on failure).
 
-`cdwatch` will only watch a single deployment target (the first) associated with the deployment-id its given. By default, it will watch the deployment target for a total of `120s` and will check the deployment every `3s`. `cdwatch` will stop either once the `timeout` elapses or the deployment finishes. You don't have to watch the deployment as it completes and can optionally provide a deployment-id with the `--id` argument.
+`cdwatch` will only watch a single deployment target (the first) associated with the deployment-id its given. By default, it will watch the deployment target for a total of `120s` and will check the deployment every `2s`. `cdwatch` will stop either once the `timeout` elapses or the deployment finishes. You don't have to watch the deployment as it completes and can optionally provide a deployment-id with the `--id` argument.
 
 Both the `timeout` and `freq` can be configured as arguments. These values should be in line with your expected deployment time.
 
